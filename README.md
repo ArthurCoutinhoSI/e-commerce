@@ -1,2 +1,2 @@
 # e-commerce
-Arquitetura de microsserviços para e-commerce com API Gateway centralizando o roteamento de tráfego para os serviços de Produtos e Pedidos.
+Microservices architecture for e-commerce with an API Gateway centralizing traffic routing to the Product and Order services.

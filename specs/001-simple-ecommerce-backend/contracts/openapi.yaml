@@ -1,0 +1,371 @@
+openapi: 3.0.0
+info:
+  title: E-commerce Backend API
+  description: Simple e-commerce backend with products and payments
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: http://localhost:8080/api
+    description: API Gateway
+
+tags:
+  - name: Products
+    description: Product catalog management
+  - name: Payments
+    description: Payment processing
+
+paths:
+  /products:
+    get:
+      tags:
+        - Products
+      summary: List all products
+      description: Retrieve all products in the catalog
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+    post:
+      tags:
+        - Products
+      summary: Create a product
+      description: Create a new product in the catalog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/{id}:
+    get:
+      tags:
+        - Products
+      summary: Get product by ID
+      description: Retrieve a specific product by its ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Product found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - Products
+      summary: Update a product
+      description: Update an existing product
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductInput'
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - Products
+      summary: Delete a product
+      description: Remove a product from the catalog
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product deleted
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payments:
+    post:
+      tags:
+        - Payments
+      summary: Initiate payment
+      description: Create a new payment transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInput'
+      responses:
+        '201':
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Unprocessable entity (insufficient stock, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /payments/{id}:
+    get:
+      tags:
+        - Payments
+      summary: Get payment status
+      description: Retrieve payment details and status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Product:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - price
+        - stockQuantity
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        price:
+          type: number
+          format: float
+          minimum: 0.01
+        stockQuantity:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProductInput:
+      type: object
+      required:
+        - name
+        - description
+        - price
+        - stockQuantity
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 1000
+        price:
+          type: number
+          format: float
+          minimum: 0.01
+        stockQuantity:
+          type: integer
+          minimum: 0
+
+    Payment:
+      type: object
+      required:
+        - id
+        - amount
+        - currency
+        - status
+        - paymentMethod
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: USD
+        status:
+          type: string
+          enum: [pending, completed, failed, cancelled]
+        paymentMethod:
+          type: string
+        productId:
+          type: string
+          format: uuid
+        orderReference:
+          type: string
+        cardDetails:
+          type: object
+          properties:
+            last4:
+              type: string
+            brand:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+        errorMessage:
+          type: string
+
+    PaymentInput:
+      type: object
+      required:
+        - amount
+        - paymentMethod
+        - productId
+        - cardDetails
+      properties:
+        amount:
+          type: number
+          format: float
+          minimum: 0.01
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          default: USD
+        paymentMethod:
+          type: string
+          enum: [credit_card, debit_card]
+        productId:
+          type: string
+          format: uuid
+        customerInfo:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+        cardDetails:
+          type: object
+          required:
+            - number
+            - expiryMonth
+            - expiryYear
+            - cvv
+          properties:
+            number:
+              type: string
+            expiryMonth:
+              type: integer
+              minimum: 1
+              maximum: 12
+            expiryYear:
+              type: integer
+            cvv:
+              type: string
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object

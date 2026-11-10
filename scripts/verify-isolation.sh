@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+COMPOSE_FILE="${COMPOSE_FILE:-$REPO_ROOT/docker-compose.yml}"
+
 BASE_URL="${BASE_URL:-http://localhost:8080}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -22,12 +26,23 @@ request() {
 
 printf 'Verifying host isolation and internal service discovery\n'
 
-# 1. Gateway must be reachable from the host.
+# 1. The database service must not publish any host port in the compose file.
+[ -f "$COMPOSE_FILE" ] || fail "compose file not found at $COMPOSE_FILE"
+if awk '
+  /^  [A-Za-z0-9_.-]+:/ { service = $1; sub(":", "", service) }
+  service == "database" && /^[[:space:]]+ports:/ { found = 1 }
+  END { exit found ? 0 : 1 }
+' "$COMPOSE_FILE"; then
+  fail "database service publishes a host port in $COMPOSE_FILE; it must stay internal"
+fi
+pass "database service has no host port mapping"
+
+# 2. Gateway must be reachable from the host.
 status="$(request "$BASE_URL/health")" || fail "gateway is unreachable at $BASE_URL"
 [ "$status" = "200" ] || fail "gateway health returned HTTP $status"
 pass "gateway reachable on host"
 
-# 2. Backend ports must NOT be reachable from the host.
+# 3. Backend ports must NOT be reachable from the host.
 for port in 3001 3002; do
   if curl -sS --connect-timeout 2 --max-time 3 "http://localhost:${port}/health" >/dev/null 2>&1; then
     fail "backend port ${port} is reachable from the host; it must stay internal"
@@ -35,7 +50,15 @@ for port in 3001 3002; do
   pass "host access to port ${port} refused"
 done
 
-# 3. A payment through the gateway proves the internal DNS path works.
+# 4. The database port must NOT be reachable from the host. A raw TCP connect
+#    works for PostgreSQL, which does not speak HTTP.
+if (exec 3<>"/dev/tcp/127.0.0.1/5432") 2>/dev/null; then
+  exec 3<&- 2>/dev/null || true
+  fail "database port 5432 is reachable from the host; it must stay internal"
+fi
+pass "host access to port 5432 refused"
+
+# 5. A payment through the gateway proves the internal DNS path works.
 status="$(request -X POST "$BASE_URL/api/products" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Isolation Test Widget","description":"Created by scripts/verify-isolation.sh","price":9.99,"stockQuantity":2}')" \

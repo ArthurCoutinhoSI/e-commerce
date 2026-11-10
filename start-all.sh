@@ -6,13 +6,13 @@ cd "$SCRIPT_DIR"
 
 echo "Starting all services for local development (non-containerized)..."
 
-# Start Product Service
-(cd product-service && npm run dev) &
+# Start Product Service (own logical database)
+(cd product-service && PGDATABASE="${PGDATABASE_PRODUCTS:-products}" npm run dev) &
 PRODUCT_PID=$!
 echo "Product Service started (PID: $PRODUCT_PID)"
 
-# Start Payment Service
-(cd payment-service && npm run dev) &
+# Start Payment Service (own logical database)
+(cd payment-service && PGDATABASE="${PGDATABASE_PAYMENTS:-payments}" npm run dev) &
 PAYMENT_PID=$!
 echo "Payment Service started (PID: $PAYMENT_PID)"
 

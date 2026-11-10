@@ -1,40 +1,51 @@
 import { Request, Response } from 'express';
 import { productStore } from '../store';
 import { ProductInput } from '../models/Product';
+import { isDbUnavailableError } from '../db';
 
-export const getAllProducts = (req: Request, res: Response) => {
-  
-  // console.log("req chegou no microservice")
+const reportDbUnavailable = (res: Response, error: unknown): boolean => {
+  if (!isDbUnavailableError(error)) return false;
+
+  console.error('Product database unavailable:', error instanceof Error ? error.message : error);
+  res.status(503).json({
+    error: 'Service Unavailable',
+    message: 'Product database is unavailable',
+  });
+  return true;
+};
+
+export const getAllProducts = async (req: Request, res: Response) => {
   try {
-    const products = productStore.getAll();
-    res.json(products);
-    // console.log("passou getAllProducts")
+    const products = await productStore.getAll();
+    return res.json(products);
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch products' });
+    if (reportDbUnavailable(res, error)) return;
+    console.error('Failed to fetch products:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch products' });
   }
 };
 
-export const getProductById = (req: Request, res: Response) => {
+export const getProductById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const product = productStore.getById(id);
-    
+    const product = await productStore.getById(id);
+
     if (!product) {
       return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
     }
-    
-    res.json(product);
+
+    return res.json(product);
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch product' });
+    if (reportDbUnavailable(res, error)) return;
+    console.error('Failed to fetch product:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch product' });
   }
 };
 
-export const createProduct = (req: Request, res: Response) => {
-  
-  // console.log("req chegou no microservice")
+export const createProduct = async (req: Request, res: Response) => {
   try {
     const productInput: ProductInput = req.body;
-    
+
     // Validation
     if (!productInput.name || !productInput.description) {
       return res.status(400).json({ error: 'Bad Request', message: 'Name and description are required' });
@@ -42,85 +53,133 @@ export const createProduct = (req: Request, res: Response) => {
     if (typeof productInput.price !== 'number' || productInput.price <= 0) {
       return res.status(400).json({ error: 'Bad Request', message: 'Price must be a positive number' });
     }
-    if (typeof productInput.stockQuantity !== 'number' || productInput.stockQuantity < 0) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Stock quantity must be a non-negative number' });
+    if (
+      typeof productInput.stockQuantity !== 'number' ||
+      !Number.isInteger(productInput.stockQuantity) ||
+      productInput.stockQuantity < 0
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'Bad Request', message: 'Stock quantity must be a non-negative number' });
     }
-    
-    // console.log("passou validation")
 
-    const product = productStore.create(productInput);
-    res.status(201).json(product);
+    const product = await productStore.create(productInput);
+    return res.status(201).json(product);
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create product' });
+    if (reportDbUnavailable(res, error)) return;
+    console.error('Failed to create product:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to create product' });
   }
 };
 
-export const updateProduct = (req: Request, res: Response) => {
+export const updateProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    
+
     // Validation
     if (updates.price !== undefined && (typeof updates.price !== 'number' || updates.price <= 0)) {
       return res.status(400).json({ error: 'Bad Request', message: 'Price must be a positive number' });
     }
-    if (updates.stockQuantity !== undefined && (typeof updates.stockQuantity !== 'number' || updates.stockQuantity < 0)) {
-      return res.status(400).json({ error: 'Bad Request', message: 'Stock quantity must be a non-negative number' });
+    if (
+      updates.stockQuantity !== undefined &&
+      (typeof updates.stockQuantity !== 'number' ||
+        !Number.isInteger(updates.stockQuantity) ||
+        updates.stockQuantity < 0)
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'Bad Request', message: 'Stock quantity must be a non-negative number' });
     }
-    
-    // 
-    
-    // console.log("passou validation")
-    
-    const product = productStore.update(id, updates);
-    
+
+    const product = await productStore.update(id, updates);
+
     if (!product) {
       return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
     }
-    
-    res.json(product);
+
+    return res.json(product);
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update product' });
+    if (reportDbUnavailable(res, error)) return;
+    console.error('Failed to update product:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update product' });
   }
 };
 
-export const deleteProduct = (req: Request, res: Response) => {
+export const deleteProduct = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const deleted = productStore.delete(id);
-    
+    const deleted = await productStore.delete(id);
+
     if (!deleted) {
       return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
     }
-    
-    res.status(204).send();
+
+    return res.status(204).send();
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to delete product' });
+    if (reportDbUnavailable(res, error)) return;
+    console.error('Failed to delete product:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to delete product' });
   }
 };
 
-export const updateStock = (req: Request, res: Response) => {
+export const updateStock = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { stockQuantity, decrease } = req.body;
-    
-    let product;
-    if (decrease !== undefined) {
-      product = productStore.decreaseStock(id, decrease);
-      if (!product) {
-        return res.status(422).json({ error: 'Unprocessable Entity', message: 'Insufficient stock or product not found' });
+    const { stockQuantity, decrease, increment } = req.body ?? {};
+
+    const provided = [stockQuantity, decrease, increment].filter((value) => value !== undefined);
+    if (provided.length !== 1) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'stockQuantity, decrease, or increment must be provided',
+      });
+    }
+
+    if (stockQuantity !== undefined) {
+      if (!Number.isInteger(stockQuantity) || stockQuantity < 0) {
+        return res
+          .status(400)
+          .json({ error: 'Bad Request', message: 'Stock quantity must be a non-negative number' });
       }
-    } else if (stockQuantity !== undefined) {
-      product = productStore.updateStock(id, stockQuantity);
+
+      const product = await productStore.updateStock(id, stockQuantity);
       if (!product) {
         return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
       }
-    } else {
-      return res.status(400).json({ error: 'Bad Request', message: 'stockQuantity or decrease must be provided' });
+      return res.json(product);
     }
-    
-    res.json(product);
+
+    if (decrease !== undefined) {
+      if (!Number.isInteger(decrease) || decrease < 1) {
+        return res
+          .status(400)
+          .json({ error: 'Bad Request', message: 'decrease must be a positive integer' });
+      }
+
+      const product = await productStore.decreaseStock(id, decrease);
+      if (!product) {
+        return res
+          .status(422)
+          .json({ error: 'Unprocessable Entity', message: 'Insufficient stock or product not found' });
+      }
+      return res.json(product);
+    }
+
+    if (!Number.isInteger(increment) || increment < 1) {
+      return res
+        .status(400)
+        .json({ error: 'Bad Request', message: 'increment must be a positive integer' });
+    }
+
+    const product = await productStore.incrementStock(id, increment);
+    if (!product) {
+      return res.status(404).json({ error: 'Not Found', message: 'Product not found' });
+    }
+    return res.json(product);
   } catch (error) {
-    res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update stock' });
+    if (reportDbUnavailable(res, error)) return;
+    console.error('Failed to update stock:', error);
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to update stock' });
   }
 };

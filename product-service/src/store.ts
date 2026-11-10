@@ -1,6 +1,7 @@
 import { Product } from './models/Product';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from './db';
+import { productsCreatedTotal, productsDeletedTotal, SERVICE } from './metrics';
 
 interface ProductRow {
   id: string;
@@ -48,6 +49,7 @@ class ProductStore {
        RETURNING *`,
       [uuidv4(), productInput.name, productInput.description, productInput.price, productInput.stockQuantity]
     );
+    productsCreatedTotal.inc({ service: SERVICE });
     return toProduct(result.rows[0] as ProductRow);
   }
 
@@ -83,7 +85,9 @@ class ProductStore {
   async delete(id: string): Promise<boolean> {
     try {
       const result = await query('DELETE FROM products WHERE id = $1', [id]);
-      return (result.rowCount ?? 0) > 0;
+      const deleted = (result.rowCount ?? 0) > 0;
+      if (deleted) productsDeletedTotal.inc({ service: SERVICE });
+      return deleted;
     } catch (error) {
       if (isInvalidUuidError(error)) return false;
       throw error;

@@ -1,6 +1,12 @@
 import { Payment, PaymentInput, PaymentStatus } from './models/Payment';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from './db';
+import {
+  paymentsCreatedTotal,
+  paymentsCompletedTotal,
+  paymentsFailedTotal,
+  SERVICE,
+} from './metrics';
 
 interface PaymentRow {
   id: string;
@@ -45,6 +51,19 @@ const toPayment = (row: PaymentRow): Payment => {
 
 const isInvalidUuidError = (error: unknown): boolean =>
   (error as { code?: string } | null)?.code === '22P02';
+
+const classifyFailureReason = (errorMessage?: string): string => {
+  switch (errorMessage) {
+    case 'Card declined':
+      return 'card_declined';
+    case 'Insufficient stock':
+      return 'insufficient_stock';
+    case 'Failed to reserve stock':
+      return 'stock_reservation_failed';
+    default:
+      return 'processing_failed';
+  }
+};
 
 const deriveCardSummary = (cardNumber: string): { last4: string; brand: string } => ({
   last4: cardNumber.slice(-4),
@@ -91,6 +110,7 @@ class PaymentStore {
       ]
     );
 
+    paymentsCreatedTotal.inc({ service: SERVICE });
     return toPayment(result.rows[0] as PaymentRow);
   }
 
@@ -115,6 +135,13 @@ class PaymentStore {
           `Payment ${id} was not updated to "${status}": no pending payment matched (it may already be terminal)`
         );
         return undefined;
+      }
+
+      if (status === 'completed') {
+        paymentsCompletedTotal.inc({ service: SERVICE });
+      } else if (status === 'failed') {
+        const reason = classifyFailureReason(errorMessage);
+        paymentsFailedTotal.inc({ service: SERVICE, reason });
       }
 
       return toPayment(result.rows[0] as PaymentRow);

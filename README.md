@@ -8,6 +8,7 @@ Microservices architecture for e-commerce with an API Gateway centralizing traff
 - **Product Service** (port 3001, internal) — product catalog and inventory
 - **Payment Service** (port 3002, internal) — payment processing and stock coordination
 - **Database** (PostgreSQL 17, internal) — persistent storage in its own container; no host port. Holds separate `products` and `payments` logical databases.
+- **Prometheus** (port 9090, operator UI) — scrapes metrics from all services over the internal network; retains 7 days or 1 GB.
 
 ## Features
 
@@ -141,6 +142,9 @@ bash scripts/concurrency-test.sh
 # Guarded, destructive reset; without --yes it changes nothing
 bash scripts/reset-data.sh
 bash scripts/reset-data.sh --yes
+
+# Prometheus telemetry: scrape targets, golden signals, business metrics
+bash scripts/telemetry-test.sh
 ```
 
 All scripts require `curl`, `jq`, and `docker`, and exit non-zero on the first failed assertion. `reset-data.sh` without `--yes` exits with status 2 after printing what would be destroyed; with `--yes` it runs `docker compose down -v`, rebuilds the stack, and verifies that both collections are empty.
@@ -153,6 +157,16 @@ bash test-api.sh
 
 For a complete manual walkthrough, including expected values, see [quickstart.md](specs/002-dockerize-microservices/quickstart.md).
 
+## Telemetry (Prometheus)
+
+- Prometheus runs as the `prometheus` container and scrapes `api-gateway`, `product-service`, and `payment-service` on `/metrics` every 15 seconds.
+- The web UI is published on `http://localhost:9090`; service metrics endpoints and scrape traffic stay on the internal network.
+- Retention: 7 days or 1 GB, whichever comes first.
+- Exposed metrics include HTTP request counts, error counts, request latency histograms, in-flight requests, runtime/process metrics, database pool health, product count, total stock, and payment outcomes.
+- Metric labels are bounded (service, method, route template, status code, and small enums). Product, payment, and user identifiers are never used as labels.
+- No sensitive data (card numbers, customer info, credentials, request bodies) appears in metrics.
+- Telemetry is read-only and does not change any existing API route, payload, or status code.
+
 ## Operations
 
 | Task | Command |
@@ -162,6 +176,8 @@ For a complete manual walkthrough, including expected values, see [quickstart.md
 | Logs (all services) | `docker compose logs -f` |
 | Logs (one service) | `docker compose logs -f api-gateway` |
 | Logs (database) | `docker compose logs -f database` |
+| Logs (Prometheus) | `docker compose logs -f prometheus` |
+| Prometheus UI | `http://localhost:9090` |
 | Restart everything (keeps data) | `docker compose restart` |
 | Restart database only (keeps data) | `docker compose restart database` |
 | Stop and remove (keeps data) | `docker compose down` |
@@ -193,6 +209,9 @@ For a complete manual walkthrough, including expected values, see [quickstart.md
 | Products/payments gone after a restart | The named volume was removed (`down -v` or reset) | Check `docker volume ls \| grep ecommerce_db_data`. Removed data cannot be recovered; the next start is empty |
 | Trailing `pending` payment after a crash | The service stopped between the pending insert and the async saga | Expected limitation: terminal status is assigned only when processing runs. No stock was decremented unless the payment is `completed` |
 | Host can reach `:5432` | A `ports:` mapping was added for the database | Remove it from `docker-compose.yml` and recreate the stack; `bash scripts/verify-isolation.sh` fails when a mapping exists |
+| Prometheus target shows `down` | Service not healthy or DNS not ready | `docker compose ps`; `docker compose logs prometheus`; targets recover after the next scrape |
+| Prometheus UI unreachable on `:9090` | Port not published or container unhealthy | `docker compose ps prometheus`; check `PROMETHEUS_PORT` and the compose `ports` mapping |
+| Metric cardinality growing unexpectedly | A label uses an identifier or raw path | Review `src/metrics.ts` files; route labels must be templates only |
 | Build fails fetching packages | No network access during build | Restore network access or configure a registry mirror |
 
 ## Local Development (without containers)

@@ -98,6 +98,12 @@ export const initDb = async (): Promise<void> => {
 
 export const query = (text: string, params?: unknown[]) => pool.query(text, params);
 
+export const getPoolStats = (): { total: number; idle: number; waiting: number } => ({
+  total: pool.totalCount,
+  idle: pool.idleCount,
+  waiting: pool.waitingCount,
+});
+
 export const closePool = async (): Promise<void> => {
   await pool.end();
 };

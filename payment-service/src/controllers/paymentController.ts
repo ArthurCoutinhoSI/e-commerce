@@ -3,6 +3,11 @@ import { paymentStore } from '../store';
 import { PaymentInput } from '../models/Payment';
 import { isDbUnavailableError } from '../db';
 import axios from 'axios';
+import {
+  stockDecrementsTotal,
+  stockCompensationsTotal,
+  SERVICE,
+} from '../metrics';
 
 const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || 'http://localhost:3001';
 const STOCK_REQUEST_TIMEOUT_MS = 3000;
@@ -124,9 +129,11 @@ const processPayment = async (
 
   try {
     await decrementProductStockOnce(productId);
+    stockDecrementsTotal.inc({ service: SERVICE, result: 'success' });
   } catch (error) {
     const insufficientStock = axios.isAxiosError(error) && error.response?.status === 422;
     const message = insufficientStock ? 'Insufficient stock' : 'Failed to reserve stock';
+    stockDecrementsTotal.inc({ service: SERVICE, result: 'insufficient' });
     console.error(
       `Stock decrement failed for payment ${paymentId} (product ${productId}):`,
       error instanceof Error ? error.message : error
@@ -142,6 +149,7 @@ const processPayment = async (
         `Stock was decremented for payment ${paymentId} but the completion write did not apply; compensating`
       );
       await compensateProductStock(productId);
+      stockCompensationsTotal.inc({ service: SERVICE });
     }
   } catch (error) {
     console.error(
@@ -250,7 +258,7 @@ export const getPaymentById = async (req: Request, res: Response) => {
   }
 };
 
-export const getAllPayments = async (req: Request, res: Response) => {
+export const getAllPayments = async (_req: Request, res: Response) => {
   try {
     const payments = await paymentStore.getAll();
     return res.json(payments);

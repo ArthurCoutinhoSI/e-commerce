@@ -109,4 +109,4 @@ step "11. Delete the test product"
 curl -sS -i -X DELETE "$BASE_URL/api/products/$PRODUCT_ID" | head -1
 
 step "Done"
-echo "Test product deleted. In-memory data resets when the stack restarts."
+echo "Test product deleted. Data now persists across restarts; use 'bash scripts/reset-data.sh --yes' to clear it."

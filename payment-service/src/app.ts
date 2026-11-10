@@ -2,20 +2,24 @@ import express from 'express';
 import cors from 'cors';
 import paymentRoutes from './routes/payments';
 import { closePool, initDb } from './db';
+import { httpMetricsMiddleware, metricsHandler } from './metrics';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3002;
 
+app.use(httpMetricsMiddleware);
 app.use(cors());
 app.use(express.json());
 
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'payment-service' });
 });
 
+app.get('/metrics', metricsHandler);
+
 app.use('/payments', paymentRoutes);
 
-app.use((req, res) => {
+app.use((_req, res) => {
   res.status(404).json({ error: 'Not Found', message: 'Route not found' });
 });
 

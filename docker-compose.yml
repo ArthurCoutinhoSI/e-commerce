@@ -1,0 +1,76 @@
+name: ecommerce
+
+services:
+  product-service:
+    build:
+      context: ./product-service
+    image: ecommerce/product-service:local
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+    networks:
+      - ecommerce
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+
+  payment-service:
+    build:
+      context: ./payment-service
+    image: ecommerce/payment-service:local
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      PRODUCT_SERVICE_URL: http://product-service:3001
+    networks:
+      - ecommerce
+    depends_on:
+      product-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    image: ecommerce/api-gateway:local
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      PRODUCT_SERVICE_URL: http://product-service:3001
+      PAYMENT_SERVICE_URL: http://payment-service:3002
+    ports:
+      - "8080:8080"
+    networks:
+      - ecommerce
+    depends_on:
+      product-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 10s
+
+networks:
+  ecommerce:
+    driver: bridge

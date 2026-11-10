@@ -1,4 +1,4 @@
-import { Payment } from './models/Payment';
+import { Payment, PaymentInput } from './models/Payment';
 import { v4 as uuidv4 } from 'uuid';
 
 class PaymentStore {
@@ -12,7 +12,7 @@ class PaymentStore {
     return this.payments.get(id);
   }
 
-  create(paymentInput: Omit<Payment, 'id' | 'createdAt' | 'status'> & { cardDetails?: any }): Payment {
+  create(paymentInput: PaymentInput): Payment {
     const now = new Date().toISOString();
     const cardNumber = paymentInput.cardDetails?.number || '';
     const last4 = cardNumber.slice(-4);

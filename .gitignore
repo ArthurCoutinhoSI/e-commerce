@@ -1,9 +1,14 @@
 # npm
 node_modules
-package-lock.json
 npm-shrinkwrap.json
 *.log
 *.gz
+
+# build output
+dist
+
+# local environment overrides
+.env
 
 # Yarn
 yarn-error.log
